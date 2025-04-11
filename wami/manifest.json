@@ -28,5 +28,27 @@
       "src": "./favicon-512.png",
       "sizes": "512x512"
     }
-  ]
+  ],
+  "protocol_handlers": [
+    {
+      "protocol": "wami",
+      "url": "./"
+    }
+  ],
+  "share_target": {
+    "action": "./",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "media",
+          "accept": ["image/*", "video/*", "audio/*", ".pdf", ".txt", ".doc", ".docx"]
+        }
+      ]
+    }
+  },
 }
