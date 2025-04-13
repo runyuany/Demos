@@ -101,7 +101,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   
   // Handle share target requests
-  if (event.request.method === 'POST' && (url.pathname === '/share-target/' || url.pathname === '/share-target')) {
+  if (event.request.method === 'POST' && (event.request.url.includes('/share-target'))) {
     // Immediately redirect to main page
     event.respondWith(Response.redirect('./?share=true', 303));
     
