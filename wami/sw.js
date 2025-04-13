@@ -124,3 +124,45 @@ self.addEventListener('fetch', event => {
     }
   })());
 });
+
+// Handle incoming share target requests
+self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+  
+  // Check if this is a share target request (POST to root)
+  if (event.request.method === 'POST' && url.pathname === '/') {
+    event.respondWith((async () => {
+      // Clone the request to extract form data
+      const formData = await event.request.formData();
+      const title = formData.get('title') || '';
+      const files = formData.getAll('media');
+      
+      // Store share data for the client to use
+      if (title.includes('ai-action') && files.length > 0) {
+        // Store the files in a temporary cache for the client to access
+        const shareCache = await caches.open('share-target-cache');
+        
+        // Create an object with the share data
+        const shareData = {
+          title: title,
+          timestamp: Date.now(),
+          fileCount: files.length
+        };
+        
+        // Store the share data and files
+        await shareCache.put('shareData', new Response(JSON.stringify(shareData)));
+        
+        // Store each file with a unique key
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const response = new Response(file);
+          await shareCache.put(`file-${i}`, response);
+        }
+      }
+      
+      // Redirect to the application
+      return Response.redirect('./?share=' + encodeURIComponent(title), 303);
+    })());
+    return;
+  }
+});

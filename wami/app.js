@@ -190,6 +190,24 @@ addFlowButton.addEventListener('click', async e => {
   await navigateToFlow(newFlow.id);
 });
 
+// Create a new flow with specific settings
+async function createNewFlow(name, steps) {
+  const flows = await flowsPromise;
+  const newFlow = {
+    id: getUniqueId(),
+    name: name || 'Untitled flow',
+    steps: steps || []
+  };
+
+  flows.push(newFlow);
+  await saveFlows(flows);
+
+  populateFlowList(flows);
+
+  await navigateToFlow(newFlow.id);
+  return newFlow;
+}
+
 // Deleting the current flow.
 deleteFlowButton.addEventListener('click', async e => {
   const flows = await flowsPromise;
@@ -414,6 +432,88 @@ viewImagesButton.addEventListener('click', async e => {
   }
 });
 
+// Process share target data when the app is launched
+async function processShareTargetData() {
+  // Check if we were launched via share target
+  const urlParams = new URLSearchParams(window.location.search);
+  const shareParam = urlParams.get('share');
+  
+  if (shareParam && shareParam.includes('ai-action')) {
+    try {
+      // Get the shared data from the cache
+      const shareCache = await caches.open('share-target-cache');
+      const shareDataResponse = await shareCache.match('shareData');
+      
+      if (shareDataResponse) {
+        const shareData = await shareDataResponse.json();
+        
+        if (shareData.fileCount > 0) {
+          // Create a new flow with resize step
+          const newFlow = await createNewFlow(shareData.title, [
+            {
+              type: 'resize-width-if-larger',
+              params: [1000]
+            }
+          ]);
+          
+          // Load the shared files
+          const imagesToStore = [];
+          for (let i = 0; i < shareData.fileCount; i++) {
+            const fileResponse = await shareCache.match(`file-${i}`);
+            if (fileResponse) {
+              const blob = await fileResponse.blob();
+              const file = new File([blob], `shared-${i + 1}.${getFileExtension(blob.type)}`, { type: blob.type });
+              
+              imagesToStore.push({
+                file,
+                name: file.name,
+                fsHandlePromise: Promise.resolve(null)
+              });
+            }
+          }
+          
+          // Store the images and update the UI
+          if (imagesToStore.length > 0) {
+            currentImages = imagesToStore;
+            populateInputImages(imagesToStore.map(image => {
+              return { src: URL.createObjectURL(image.file), name: image.file.name };
+            }));
+            
+            // Automatically run the flow
+            setTimeout(() => {
+              runFlowButton.click();
+            }, 500);
+          }
+          
+          // Clear the cache after processing
+          await shareCache.delete('shareData');
+          for (let i = 0; i < shareData.fileCount; i++) {
+            await shareCache.delete(`file-${i}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error processing share target data:', err);
+    }
+    
+    // Remove the share parameter from URL without page reload
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}
+
+// Helper function to get file extension from mime type
+function getFileExtension(mimeType) {
+  const extensions = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/svg+xml': 'svg'
+  };
+  
+  return extensions[mimeType] || 'jpg';
+}
+
 // When the app starts, get the flows and display them in the sidebar.
 async function startApp() {
   const flows = await flowsPromise;
@@ -423,6 +523,9 @@ async function startApp() {
   if (!('showOpenFilePicker' in window)) {
     saveImagesButton.remove();
   }
+  
+  // Process share target data if available
+  await processShareTargetData();
 }
 
 startApp();
