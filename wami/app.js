@@ -438,7 +438,7 @@ async function processShareTargetData() {
   const urlParams = new URLSearchParams(window.location.search);
   const shareParam = urlParams.get('share');
   
-  if (shareParam && shareParam.includes('ai-action')) {
+  if (shareParam) {
     try {
       // Get the shared data from the cache
       const shareCache = await caches.open('share-target-cache');
@@ -448,13 +448,19 @@ async function processShareTargetData() {
         const shareData = await shareDataResponse.json();
         
         if (shareData.fileCount > 0) {
+          // Only auto-process if title contains ai-action
+          // const shouldAutoProcess = shareParam.includes('ai-action');
+          
           // Create a new flow with resize step
-          const newFlow = await createNewFlow(shareData.title, [
-            {
-              type: 'resize-width-if-larger',
-              params: [1000]
-            }
-          ]);
+          const newFlow = await createNewFlow(
+            shareData.title || 'Shared Images Flow', 
+            shouldAutoProcess ? [
+              {
+                type: 'resize-width-if-larger',
+                params: [1000]
+              }
+            ] : []
+          );
           
           // Load the shared files
           const imagesToStore = [];
@@ -479,10 +485,12 @@ async function processShareTargetData() {
               return { src: URL.createObjectURL(image.file), name: image.file.name };
             }));
             
-            // Automatically run the flow
-            setTimeout(() => {
-              runFlowButton.click();
-            }, 500);
+            // Automatically run the flow if it should be auto-processed
+            if (shouldAutoProcess) {
+              setTimeout(() => {
+                runFlowButton.click();
+              }, 500);
+            }
           }
           
           // Clear the cache after processing
