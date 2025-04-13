@@ -449,8 +449,7 @@ async function processShareTargetData() {
         
         if (shareData.fileCount > 0) {
           // Only auto-process if title contains ai-action
-          // const shouldAutoProcess = shareData.title.includes('ai-action');
-          
+          const shouldAutoProcess = true;
           // Create a new flow with resize step
           const newFlow = await createNewFlow(
             shareData.title || 'Shared Images Flow', 
