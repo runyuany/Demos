@@ -436,9 +436,9 @@ viewImagesButton.addEventListener('click', async e => {
 async function processShareTargetData() {
   // Check if we were launched via share target
   const urlParams = new URLSearchParams(window.location.search);
-  const shareParam = urlParams.get('share');
+  const isShared = urlParams.get('share') === 'true';
   
-  if (shareParam) {
+  if (isShared) {
     try {
       // Get the shared data from the cache
       const shareCache = await caches.open('share-target-cache');
@@ -449,7 +449,7 @@ async function processShareTargetData() {
         
         if (shareData.fileCount > 0) {
           // Only auto-process if title contains ai-action
-          // const shouldAutoProcess = shareParam.includes('ai-action');
+          // const shouldAutoProcess = shareData.title.includes('ai-action');
           
           // Create a new flow with resize step
           const newFlow = await createNewFlow(

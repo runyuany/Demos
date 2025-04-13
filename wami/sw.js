@@ -102,7 +102,53 @@ self.addEventListener('fetch', event => {
   
   // Handle share target requests
   if (event.request.method === 'POST' && (url.pathname === '/share-target/' || url.pathname === '/share-target')) {
-    event.respondWith(handleShareTarget(event));
+    // Immediately redirect to main page
+    event.respondWith(Response.redirect('./?share=true', 303));
+    
+    // Process the form data in the background
+    event.waitUntil(
+      (async () => {
+        try {
+          const formData = await event.request.formData();
+          
+          // Extract data
+          const data = {
+            title: formData.get('title') || '',
+            text: formData.get('text') || '',
+            url: formData.get('url') || ''
+          };
+          
+          const files = formData.getAll('media');
+          
+          // Store share data for the client to use if there are files
+          if (files.length > 0) {
+            // Store the files in a temporary cache for the client to access
+            const shareCache = await caches.open('share-target-cache');
+            
+            // Create an object with the share data
+            const shareData = {
+              title: data.title,
+              text: data.text,
+              url: data.url,
+              timestamp: Date.now(),
+              fileCount: files.length
+            };
+            
+            // Store the share data and files
+            await shareCache.put('shareData', new Response(JSON.stringify(shareData)));
+            
+            // Store each file with a unique key
+            for (let i = 0; i < files.length; i++) {
+              const file = files[i];
+              const response = new Response(file);
+              await shareCache.put(`file-${i}`, response);
+            }
+          }
+        } catch (error) {
+          console.error('Error processing share target data:', error);
+        }
+      })()
+    );
     return;
   }
 
@@ -130,42 +176,3 @@ self.addEventListener('fetch', event => {
     }
   })());
 });
-
-// Handle incoming share target requests
-async function handleShareTarget(event) {
-  try {
-    // Clone the request to extract form data
-    const formData = await event.request.formData();
-    const title = formData.get('title') || '';
-    const files = formData.getAll('media');
-    
-    // Store share data for the client to use
-    if (files.length > 0) {
-      // Store the files in a temporary cache for the client to access
-      const shareCache = await caches.open('share-target-cache');
-      
-      // Create an object with the share data
-      const shareData = {
-        title: title,
-        timestamp: Date.now(),
-        fileCount: files.length
-      };
-      
-      // Store the share data and files
-      await shareCache.put('shareData', new Response(JSON.stringify(shareData)));
-      
-      // Store each file with a unique key
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const response = new Response(file);
-        await shareCache.put(`file-${i}`, response);
-      }
-    }
-    
-    // Redirect to the application with the share parameter
-    return Response.redirect('./?share=' + encodeURIComponent(title), 303);
-  } catch (error) {
-    console.error('Error handling share target:', error);
-    return Response.redirect('./?share=error', 303);
-  }
-}
