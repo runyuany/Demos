@@ -446,20 +446,39 @@ async function processShareTargetData() {
       
       if (shareDataResponse) {
         const shareData = await shareDataResponse.json();
+        console.log('Share data received:', shareData);
         
         if (shareData.fileCount > 0) {
-          // Only auto-process if title contains ai-action
+          // Only auto-process if title contains ai-action (currently always true for testing)
           const shouldAutoProcess = true;
-          // Create a new flow with resize step
-          const newFlow = await createNewFlow(
-            shareData.title || 'Shared Images Flow', 
-            shouldAutoProcess ? [
-              {
-                type: 'resize-width-if-larger',
-                params: [1000]
-              }
-            ] : []
-          );
+          
+          // Check if a flow with this name already exists
+          const flows = await flowsPromise;
+          const flowTitle = shareData.title || 'Shared Images Flow';
+          const existingFlow = flows.find(flow => flow.name === flowTitle);
+          
+          let targetFlow;
+          
+          // If a flow with the same name exists, use it instead of creating a new one
+          // This prevents duplicate flows from being created when sharing with the same title
+          if (existingFlow) {
+            console.log(`Using existing flow: "${flowTitle}" with ID ${existingFlow.id}`);
+            targetFlow = existingFlow;
+            // Navigate to the existing flow
+            await navigateToFlow(existingFlow.id + '');
+          } else {
+            // Create a new flow with resize step if no matching flow exists
+            console.log(`Creating new flow: "${flowTitle}"`);
+            targetFlow = await createNewFlow(
+              flowTitle, 
+              shouldAutoProcess ? [
+                {
+                  type: 'resize-width-if-larger',
+                  params: [1000]
+                }
+              ] : []
+            );
+          }
           
           // Load the shared files
           const imagesToStore = [];
@@ -479,6 +498,7 @@ async function processShareTargetData() {
           
           // Store the images and update the UI
           if (imagesToStore.length > 0) {
+            console.log(`Loaded ${imagesToStore.length} images from share`);
             currentImages = imagesToStore;
             populateInputImages(imagesToStore.map(image => {
               return { src: URL.createObjectURL(image.file), name: image.file.name };
@@ -486,6 +506,7 @@ async function processShareTargetData() {
             
             // Automatically run the flow if it should be auto-processed
             if (shouldAutoProcess) {
+              console.log('Auto-processing images...');
               setTimeout(() => {
                 runFlowButton.click();
               }, 500);
@@ -497,7 +518,11 @@ async function processShareTargetData() {
           for (let i = 0; i < shareData.fileCount; i++) {
             await shareCache.delete(`file-${i}`);
           }
+        } else {
+          console.warn('No files in the shared data');
         }
+      } else {
+        console.warn('No share data found in cache');
       }
     } catch (err) {
       console.error('Error processing share target data:', err);
