@@ -558,6 +558,26 @@ async function startApp() {
   
   // Process share target data if available
   await processShareTargetData();
+  
+  // Log protocol activation if present
+  checkProtocolActivation();
+}
+
+// Simply log any protocol activation
+function checkProtocolActivation() {
+  const url = new URL(window.location.href);
+  const protocolUrl = url.searchParams.get('url');
+  
+  // If we have a URL parameter that starts with web+wami:, it's a protocol activation
+  if (protocolUrl && protocolUrl.startsWith('web+wami:')) {
+    console.log(`Protocol activation detected: ${protocolUrl}`);
+    
+    // Just clean up the URL without any further processing
+    if (window.history && window.history.replaceState) {
+      url.searchParams.delete('url');
+      window.history.replaceState({}, document.title, url.toString());
+    }
+  }
 }
 
 startApp();
