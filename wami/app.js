@@ -477,6 +477,7 @@ async function processShareTargetData() {
                 flowTitle = decodeURIComponent(urlPath);
                 console.log('Using URL path as flow name:', flowTitle);
                 
+                flowTitle = flowTitle.replace(/\/+/g, ' ').trim();
                 // Determine the flow steps based on URL pattern
                 if (mainCommand.includes('rotate')) {
                   console.log('Creating rotate flow');
