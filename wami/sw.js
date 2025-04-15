@@ -102,6 +102,8 @@ self.addEventListener('fetch', event => {
   
   // Handle share target requests
   if (event.request.method === 'POST' && (event.request.url.includes('/share-target'))) {
+    console.log('📨 Share target request received:', event.request.url);
+    
     // Immediately redirect to main page
     event.respondWith(Response.redirect('./?share=true', 303));
     
@@ -109,6 +111,7 @@ self.addEventListener('fetch', event => {
     event.waitUntil(
       (async () => {
         try {
+          console.log('🔍 Processing share target form data...');
           const formData = await event.request.formData();
           
           // Extract data
@@ -117,35 +120,85 @@ self.addEventListener('fetch', event => {
             text: formData.get('text') || '',
             url: formData.get('url') || ''
           };
+          console.log('📝 Share metadata:', data);
           
           const files = formData.getAll('media');
+          console.log(`📁 Received ${files.length} files:`, files.map(f => ({ name: f.name || 'unnamed', type: f.type, size: f.size })));
           
-          // Store share data for the client to use if there are files
           if (files.length > 0) {
-            // Store the files in a temporary cache for the client to access
-            const shareCache = await caches.open('share-target-cache');
+            console.log('🔄 Converting files to transferable objects...');
+            // Convert files to array buffers and create transferable objects
+            const processedFiles = await Promise.all(files.map(async (file, index) => {
+              // Read the file data
+              const arrayBuffer = await file.arrayBuffer();
+              console.log(`📄 Processed file ${index + 1}/${files.length} (${file.name || 'unnamed'}, ${file.size} bytes)`);
+              
+              return {
+                buffer: arrayBuffer,
+                type: file.type,
+                name: file.name || `shared-${index + 1}.jpg`,
+                size: file.size,
+                lastModified: file.lastModified
+              };
+            }));
             
-            // Create an object with the share data
-            const shareData = {
-              title: data.title,
-              text: data.text,
-              url: data.url,
-              timestamp: Date.now(),
-              fileCount: files.length
-            };
+            // Get all window clients
+            console.log('🔍 Looking for active window clients...');
+            const clients = await self.clients.matchAll({
+              type: 'window',
+              includeUncontrolled: true
+            });
+            console.log(`👥 Found ${clients.length} window clients`);
             
-            // Store the share data and files
-            await shareCache.put('shareData', new Response(JSON.stringify(shareData)));
-            
-            // Store each file with a unique key
-            for (let i = 0; i < files.length; i++) {
-              const file = files[i];
-              const response = new Response(file);
-              await shareCache.put(`file-${i}`, response);
+            if (clients.length > 0) {
+              // Create array of transferable objects (the array buffers)
+              const transferables = processedFiles.map(file => file.buffer);
+              
+              // Find the best client to send to - prefer focused ones
+              const targetClient = clients.find(client => client.focused) || clients[0];
+              console.log(`📤 Sending data to client: ${targetClient.id} (focused: ${!!clients.find(client => client.focused)})`);
+              
+              // Send the data using structured clone algorithm with transferables
+              targetClient.postMessage({
+                type: 'SHARE_TARGET_DATA',
+                data: data,
+                files: processedFiles,
+                timestamp: Date.now()
+              }, transferables);
+              console.log('✅ Data sent to client via postMessage');
+            } else {
+              console.log('⚠️ No active clients found, falling back to cache storage');
+              // Fallback to cache if no clients are available
+              const shareCache = await caches.open('share-target-cache');
+              
+              // Create an object with the share data
+              const shareData = {
+                title: data.title,
+                text: data.text,
+                url: data.url,
+                timestamp: Date.now(),
+                fileCount: files.length
+              };
+              
+              // Store the share data and files
+              await shareCache.put('shareData', new Response(JSON.stringify(shareData)));
+              console.log('💾 Share data stored in cache');
+              
+              // Store each file with a unique key
+              for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const response = new Response(file);
+                await shareCache.put(`file-${i}`, response);
+                console.log(`💾 File ${i + 1}/${files.length} stored in cache (${file.size} bytes)`);
+              }
+              console.log('✅ All files stored in cache for later retrieval');
             }
+          } else {
+            console.warn('⚠️ No files received in share');
           }
         } catch (error) {
-          console.error('Error processing share target data:', error);
+          console.error('❌ Error processing share target data:', error);
+          console.error('Stack trace:', error.stack);
         }
       })()
     );
