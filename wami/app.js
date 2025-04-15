@@ -27,174 +27,6 @@ let currentImages = [];
 let outputImages = [];
 const imageViewer = new ImageViewer(imageViewerDialog);
 
-// Add event listener for messages from service worker
-navigator.serviceWorker.addEventListener('message', async (event) => {
-  if (event.data && event.data.type === 'SHARE_TARGET_DATA') {
-    console.log('📩 Received shared data from service worker:', {
-      timestamp: event.data.timestamp,
-      dataFields: Object.keys(event.data.data),
-      fileCount: event.data.files?.length || 0,
-      fileSizes: event.data.files?.map(f => f.size) || []
-    });
-    
-    try {
-      // Extract the files from the message
-      const { files, data } = event.data;
-      
-      if (files && files.length > 0) {
-        console.log('🔍 Processing shared files...');
-        
-        // Determine the flow name - check if URL is a web+wami URL
-        let flowTitle = data.title || 'Shared Images Flow';
-        
-        // Default flow steps
-        let flowSteps = [
-          {
-            type: 'resize-width-if-larger',
-            params: [1000]
-          }
-        ];
-        
-        // If URL field exists and starts with web+wami://, use it as flow parameters
-        if (data.url && data.url.trim() !== '') {
-          const url = data.url.trim();
-          console.log('🔗 URL in share data:', url);
-          
-          if (url.startsWith('web+wami://')) {
-            // Extract the part after web+wami://
-            const urlPath = url.substring('web+wami://'.length);
-            if (urlPath && urlPath.trim() !== '') {
-              // Get the path without query parameters
-              const pathParts = urlPath.split('?')[0].split('/');
-              const mainCommand = pathParts[0].toLowerCase();
-              
-              // Set flow title based on the URL path
-              flowTitle = decodeURIComponent(urlPath);
-              console.log('📋 Using URL path as flow name:', flowTitle);
-              
-              // Determine the flow steps based on URL pattern
-              if (mainCommand.includes('rotate')) {
-                console.log('🔄 Creating rotate flow');
-                flowSteps = [
-                  {
-                    type: 'rotate',
-                    params: [90]
-                  }
-                ];
-              } else if (mainCommand.includes('flip')) {
-                console.log('↕️ Creating flip flow');
-                flowSteps = [
-                  {
-                    type: 'flip',
-                    params: []
-                  }
-                ];
-              } else if (mainCommand.includes('paint')) {
-                console.log('🎨 Creating paint flow');
-                flowSteps = [
-                  {
-                    type: 'paint',
-                    params: [5]
-                  }
-                ];
-              } else if (mainCommand.includes('sepia')) {
-                console.log('🧪 Creating sepia flow');
-                flowSteps = [
-                  {
-                    type: 'sepia-tone',
-                    params: [80]
-                  }
-                ];
-              } else if (mainCommand.includes('blur')) {
-                console.log('🌫️ Creating blur flow');
-                flowSteps = [
-                  {
-                    type: 'blur',
-                    params: [3]
-                  }
-                ];
-              } else if (mainCommand.includes('negate')) {
-                console.log('🔄 Creating negate flow');
-                flowSteps = [
-                  {
-                    type: 'negate',
-                    params: []
-                  }
-                ];
-              } else if (mainCommand.includes('resize')) {
-                // Try to extract width parameter
-                const width = parseInt(pathParts[1]) || 1000;
-                console.log(`📏 Creating resize flow with width ${width}`);
-                flowSteps = [
-                  {
-                    type: 'resize-width-if-larger',
-                    params: [width]
-                  }
-                ];
-              }
-            }
-          }
-        }
-        
-        // Check if a flow with this name already exists
-        const flows = await flowsPromise;
-        const existingFlow = flows.find(flow => flow.name === flowTitle);
-        
-        let targetFlow;
-        
-        // If a flow with the same name exists, use it
-        if (existingFlow) {
-          console.log(`📋 Using existing flow: "${flowTitle}" with ID ${existingFlow.id}`);
-          targetFlow = existingFlow;
-          // Navigate to the existing flow
-          await navigateToFlow(existingFlow.id + '');
-        } else {
-          // Create a new flow with selected steps
-          console.log(`📋 Creating new flow: "${flowTitle}" with steps:`, flowSteps);
-          targetFlow = await createNewFlow(flowTitle, flowSteps);
-        }
-        
-        // Convert the received array buffers back to File objects
-        console.log('🔄 Converting received array buffers to File objects...');
-        const imagesToStore = files.map((fileData, index) => {
-          // Create a new File object from the array buffer
-          const blob = new Blob([fileData.buffer], { type: fileData.type });
-          const file = new File([blob], fileData.name || `shared-${index + 1}.jpg`, { 
-            type: fileData.type,
-            lastModified: fileData.lastModified
-          });
-          
-          return {
-            file,
-            name: file.name,
-            fsHandlePromise: Promise.resolve(null)
-          };
-        });
-        
-        // Store the images and update the UI
-        if (imagesToStore.length > 0) {
-          console.log(`📊 Processed ${imagesToStore.length} images from share`);
-          currentImages = imagesToStore;
-          populateInputImages(imagesToStore.map(image => {
-            return { src: URL.createObjectURL(image.file), name: image.file.name };
-          }));
-          
-          // Automatically run the flow if needed
-          console.log('▶️ Auto-running flow...');
-          setTimeout(() => {
-            runFlowButton.click();
-          }, 500);
-        }
-      } else {
-        console.warn('⚠️ No files in the received shared data');
-      }
-    } catch (error) {
-      console.error('❌ Error processing shared data from service worker:', error);
-      console.error('Stack trace:', error.stack);
-    }
-  }
-});
-
 async function navigateToHome() {
   currentFlow = null;
   currentId = null;
@@ -812,11 +644,9 @@ async function startApp() {
   }
   
   // Process share target data if available
-  console.log('🔍 Checking for share target data in cache...');
   await processShareTargetData();
   
   // Log protocol activation if present
-  console.log('🔍 Checking for protocol activation...');
   checkProtocolActivation();
 }
 
@@ -827,34 +657,12 @@ function checkProtocolActivation() {
   
   // If we have a URL parameter that starts with web+wami:, it's a protocol activation
   if (protocolUrl && protocolUrl.startsWith('web+wami:')) {
-    console.log(`🔗 Protocol activation detected: ${protocolUrl}`);
-    
-    try {
-      // Parse the protocol URL to extract command and parameters
-      const urlPath = protocolUrl.substring('web+wami:'.length);
-      if (urlPath.startsWith('//')) {
-        const path = urlPath.substring(2);
-        const pathParts = path.split('/');
-        
-        if (pathParts.length > 0) {
-          console.log(`🔍 Protocol command: ${pathParts[0]}`);
-          
-          if (pathParts.length > 1) {
-            console.log(`🔢 Protocol parameters:`, pathParts.slice(1));
-          } else {
-            console.log(`ℹ️ No parameters provided in protocol URL`);
-          }
-        }
-      }
-    } catch (err) {
-      console.error(`❌ Error parsing protocol URL: ${err}`);
-    }
+    console.log(`Protocol activation detected: ${protocolUrl}`);
     
     // Just clean up the URL without any further processing
     if (window.history && window.history.replaceState) {
       url.searchParams.delete('url');
       window.history.replaceState({}, document.title, url.toString());
-      console.log(`🧹 Cleaned up URL parameters`);
     }
   }
 }
