@@ -449,12 +449,104 @@ async function processShareTargetData() {
         console.log('Share data received:', shareData);
         
         if (shareData.fileCount > 0) {
-          // Only auto-process if title contains ai-action (currently always true for testing)
+          // Determine the flow name - check if URL is a web+wami URL
+          let flowTitle = shareData.title || 'Shared Images Flow';
+          
+          // Default flow steps
+          let flowSteps = [
+            {
+              type: 'resize-width-if-larger',
+              params: [1000]
+            }
+          ];
+          
+          // If URL field exists and starts with web+wami://, use it as the flow name
+          if (shareData.url && shareData.url.trim() !== '') {
+            const url = shareData.url.trim();
+            console.log('URL in share data:', url);
+            
+            if (url.startsWith('web+wami://')) {
+              // Extract the part after web+wami://
+              const urlPath = url.substring('web+wami://'.length);
+              if (urlPath && urlPath.trim() !== '') {
+                // Get the path without query parameters
+                const pathParts = urlPath.split('?')[0].split('/');
+                const mainCommand = pathParts[0].toLowerCase();
+                
+                // Set flow title based on the URL path
+                flowTitle = decodeURIComponent(urlPath);
+                console.log('Using URL path as flow name:', flowTitle);
+                
+                // Determine the flow steps based on URL pattern
+                if (mainCommand.includes('rotate')) {
+                  console.log('Creating rotate flow');
+                  flowSteps = [
+                    {
+                      type: 'rotate',
+                      params: [90]
+                    }
+                  ];
+                } else if (mainCommand.includes('flip')) {
+                  console.log('Creating flip flow');
+                  flowSteps = [
+                    {
+                      type: 'flip',
+                      params: []
+                    }
+                  ];
+                } else if (mainCommand.includes('paint')) {
+                  console.log('Creating paint flow');
+                  flowSteps = [
+                    {
+                      type: 'paint',
+                      params: [5]
+                    }
+                  ];
+                } else if (mainCommand.includes('sepia')) {
+                  console.log('Creating sepia flow');
+                  flowSteps = [
+                    {
+                      type: 'sepia-tone',
+                      params: [80]
+                    }
+                  ];
+                } else if (mainCommand.includes('blur')) {
+                  console.log('Creating blur flow');
+                  flowSteps = [
+                    {
+                      type: 'blur',
+                      params: [3]
+                    }
+                  ];
+                } else if (mainCommand.includes('negate')) {
+                  console.log('Creating negate flow');
+                  flowSteps = [
+                    {
+                      type: 'negate',
+                      params: []
+                    }
+                  ];
+                } else if (mainCommand.includes('resize')) {
+                  // Try to extract width parameter
+                  const width = parseInt(pathParts[1]) || 1000;
+                  console.log(`Creating resize flow with width ${width}`);
+                  flowSteps = [
+                    {
+                      type: 'resize-width-if-larger',
+                      params: [width]
+                    }
+                  ];
+                }
+                // Default is already set to resize-width-if-larger
+              }
+            }
+          }
+          
+          // Only auto-process if title contains ai-action
           const shouldAutoProcess = true;
           
           // Check if a flow with this name already exists
           const flows = await flowsPromise;
-          const flowTitle = shareData.title || 'Shared Images Flow';
           const existingFlow = flows.find(flow => flow.name === flowTitle);
           
           let targetFlow;
@@ -467,16 +559,11 @@ async function processShareTargetData() {
             // Navigate to the existing flow
             await navigateToFlow(existingFlow.id + '');
           } else {
-            // Create a new flow with resize step if no matching flow exists
-            console.log(`Creating new flow: "${flowTitle}"`);
+            // Create a new flow with selected steps
+            console.log(`Creating new flow: "${flowTitle}" with steps:`, flowSteps);
             targetFlow = await createNewFlow(
               flowTitle, 
-              shouldAutoProcess ? [
-                {
-                  type: 'resize-width-if-larger',
-                  params: [1000]
-                }
-              ] : []
+              shouldAutoProcess ? flowSteps : []
             );
           }
           
