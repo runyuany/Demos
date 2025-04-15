@@ -118,7 +118,7 @@ self.addEventListener('fetch', event => {
             url: formData.get('url') || ''
           };
           
-          const files = formData.getAll('media');
+          const files = formData.getAll('windowsActionFiles');
           
           // Store share data for the client to use if there are files
           if (files.length > 0) {
